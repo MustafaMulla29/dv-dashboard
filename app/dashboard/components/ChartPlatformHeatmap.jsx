@@ -1,6 +1,9 @@
 "use client";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import dynamic from "next/dynamic";
+
+const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 
 export default function ChartPlatformHeatmap({ data }) {
   const platforms = [
@@ -37,20 +40,50 @@ export default function ChartPlatformHeatmap({ data }) {
       .filter(val => val > 0);
   });
 
-  const correlations = {};
-  platforms.forEach((p1, i) => {
-    platforms.forEach((p2, j) => {
-      const key = `${p1.label}-${p2.label}`;
-      if (i === j) {
-        correlations[key] = 1;
+  // Build correlation matrix
+  const correlationMatrix = [];
+  const labels = platforms.map(p => p.label);
+  
+  platforms.forEach((p1) => {
+    const row = [];
+    platforms.forEach((p2) => {
+      if (p1.key === p2.key) {
+        row.push(1);
       } else {
         const data1 = platformData[p1.key].slice(0, 100);
         const data2 = platformData[p2.key].slice(0, 100);
         const minLen = Math.min(data1.length, data2.length);
-        correlations[key] = calculateCorrelation(data1.slice(0, minLen), data2.slice(0, minLen));
+        row.push(calculateCorrelation(data1.slice(0, minLen), data2.slice(0, minLen)));
       }
     });
+    correlationMatrix.push(row);
   });
+
+  const trace = {
+    z: correlationMatrix,
+    x: labels,
+    y: labels,
+    type: "heatmap",
+    colorscale: "RdYlGn",
+    text: correlationMatrix.map(row => row.map(val => val.toFixed(2))),
+    texttemplate: "%{text}",
+    textfont: { size: 14 },
+    showscale: true,
+    colorbar: {
+      title: "Correlation",
+      tickmode: "linear",
+      tick0: -1,
+      dtick: 0.5,
+    },
+  };
+
+  const layout = {
+    xaxis: { title: "Platform", side: "bottom" },
+    yaxis: { title: "Platform" },
+    paper_bgcolor: "white",
+    plot_bgcolor: "white",
+    margin: { l: 100, r: 50, t: 20, b: 100 },
+  };
 
   return (
     <Card className="w-full">
@@ -58,42 +91,12 @@ export default function ChartPlatformHeatmap({ data }) {
         <CardTitle>Platform Correlation Heatmap</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr>
-                <th className="border p-2 bg-gray-50"></th>
-                {platforms.map(p => (
-                  <th key={p.label} className="border p-2 bg-gray-50 text-sm">{p.label}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {platforms.map(p1 => (
-                <tr key={p1.label}>
-                  <td className="border p-2 bg-gray-50 font-medium text-sm">{p1.label}</td>
-                  {platforms.map(p2 => {
-                    const corr = correlations[`${p1.label}-${p2.label}`];
-                    const intensity = Math.abs(corr);
-                    const bgColor = corr >= 0 
-                      ? `rgba(29, 185, 84, ${intensity})`
-                      : `rgba(239, 68, 68, ${intensity})`;
-                    
-                    return (
-                      <td 
-                        key={p2.label}
-                        className="border p-2 text-center text-sm font-medium"
-                        style={{ backgroundColor: bgColor, color: intensity > 0.5 ? 'white' : 'black' }}
-                      >
-                        {corr.toFixed(2)}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Plot
+          data={[trace]}
+          layout={layout}
+          config={{ responsive: true }}
+          style={{ width: "100%", height: "400px" }}
+        />
       </CardContent>
     </Card>
   );

@@ -1,6 +1,9 @@
 "use client";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import dynamic from "next/dynamic";
+
+const Plot = dynamic(() => import("react-plotly.js"), { ssr: false });
 
 export default function ChartArtistPopularityHeatmap({ data }) {
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -39,13 +42,33 @@ export default function ChartArtistPopularityHeatmap({ data }) {
     }
   });
 
-  // Find max value for scaling
-  let maxStreams = 0;
-  Object.values(artistMonthData).forEach(months => {
-    Object.values(months).forEach(streams => {
-      if (streams > maxStreams) maxStreams = streams;
-    });
-  });
+  // Build heatmap data
+  const zData = top10Artists.map(artist => 
+    monthNames.map((_, idx) => artistMonthData[artist][idx] / 1e9) // Convert to billions
+  );
+
+  const trace = {
+    z: zData,
+    x: monthNames,
+    y: top10Artists,
+    type: "heatmap",
+    colorscale: "Greens",
+    text: zData.map(row => row.map(val => val.toFixed(2) + "B")),
+    texttemplate: "%{text}",
+    textfont: { size: 10 },
+    showscale: true,
+    colorbar: {
+      title: "Streams (B)",
+    },
+  };
+
+  const layout = {
+    xaxis: { title: "Month", side: "bottom" },
+    yaxis: { title: "Artist" },
+    paper_bgcolor: "white",
+    plot_bgcolor: "white",
+    margin: { l: 150, r: 50, t: 20, b: 80 },
+  };
 
   return (
     <Card className="w-full">
@@ -53,46 +76,12 @@ export default function ChartArtistPopularityHeatmap({ data }) {
         <CardTitle>Top 10 Artists Popularity by Month</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr>
-                <th className="border p-2 bg-gray-50 sticky left-0 z-10">Artist</th>
-                {monthNames.map(month => (
-                  <th key={month} className="border p-2 bg-gray-50">{month}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {top10Artists.map(artist => (
-                <tr key={artist}>
-                  <td className="border p-2 bg-gray-50 font-medium sticky left-0 z-10 whitespace-nowrap">
-                    {artist.length > 20 ? artist.substring(0, 17) + "..." : artist}
-                  </td>
-                  {monthNames.map((_, idx) => {
-                    const streams = artistMonthData[artist][idx];
-                    const intensity = streams / maxStreams;
-                    const bgColor = `rgba(29, 185, 84, ${intensity})`;
-                    
-                    return (
-                      <td 
-                        key={idx}
-                        className="border p-2 text-center"
-                        style={{ 
-                          backgroundColor: bgColor,
-                          color: intensity > 0.5 ? 'white' : 'black'
-                        }}
-                        title={`${(streams / 1e9).toFixed(2)}B streams`}
-                      >
-                        {streams > 0 ? (streams / 1e9).toFixed(1) + "B" : "-"}
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Plot
+          data={[trace]}
+          layout={layout}
+          config={{ responsive: true }}
+          style={{ width: "100%", height: "500px" }}
+        />
       </CardContent>
     </Card>
   );
